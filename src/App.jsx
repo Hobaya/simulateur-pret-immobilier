@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
-import { Info, Download, RotateCcw, Search, ChevronDown, ChevronRight, Printer, Pencil, Check, RefreshCw, Plus, X, Copy, SplitSquareHorizontal } from "lucide-react";
+import { Info, Download, RotateCcw, Search, ChevronDown, ChevronRight, Printer, Pencil, Check, RefreshCw, Plus, X, Copy, SplitSquareHorizontal, Lock, Unlock } from "lucide-react";
 import { computeAmortization } from "./amortization.js";
 
 const INK = "#16233D";
@@ -125,18 +125,43 @@ function MiniField({ label, value, onChange, step, suffix }) {
   );
 }
 
-function SliderField({ label, value, onChange, min, max, step, suffix, tooltip }) {
+function SliderField({ label, value, onChange, min, max, step, suffix, tooltip, locked = false, onToggleLock }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1 gap-2">
         <label className="flex items-center text-[12px] font-medium" style={{ color: INK }}>
           {label}
           {tooltip && <Tip text={tooltip} />}
         </label>
-        <span className="text-[12px] font-semibold" style={{ color: GOLD }}>
-          {value}
-          {suffix}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center rounded border overflow-hidden bg-white" style={{ borderColor: LINE }}>
+            <input
+              type="number"
+              value={value}
+              min={min}
+              max={max}
+              step={step}
+              disabled={locked}
+              onChange={(e) => onChange(Math.min(max, Math.max(min, parseFloat(e.target.value) || 0)))}
+              className="w-14 px-1.5 py-0.5 text-[12px] text-right font-semibold outline-none bg-transparent disabled:opacity-50"
+              style={{ color: GOLD }}
+            />
+            <span className="px-1 text-[11px]" style={{ color: "#8A8371" }}>
+              {suffix}
+            </span>
+          </div>
+          {onToggleLock && (
+            <button
+              type="button"
+              onClick={onToggleLock}
+              title={locked ? "Déverrouiller ce champ" : "Verrouiller ce champ"}
+              className="shrink-0 hover:opacity-70"
+              style={{ color: locked ? GOLD : "#8A8371" }}
+            >
+              {locked ? <Lock size={14} /> : <Unlock size={14} />}
+            </button>
+          )}
+        </div>
       </div>
       <input
         type="range"
@@ -144,8 +169,9 @@ function SliderField({ label, value, onChange, min, max, step, suffix, tooltip }
         max={max}
         step={step}
         value={value}
+        disabled={locked}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-current"
+        className="w-full accent-current disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ accentColor: GOLD }}
       />
     </div>
@@ -177,7 +203,10 @@ function CentimesToggle({ checked, onChange }) {
 export default function App() {
   const [capital, setCapital] = useState(250000);
   const [taux, setTaux] = useState(3.5);
+  const [tauxVerrouille, setTauxVerrouille] = useState(false);
   const [dureeAnnees, setDureeAnnees] = useState(20);
+  const [dureeVerrouille, setDureeVerrouille] = useState(false);
+  const [dureeUnite, setDureeUnite] = useState("ans");
   const [tauxAssurance, setTauxAssurance] = useState(0.34);
   const [modeAssurance, setModeAssurance] = useState("initial");
   const [assuranceSaisie, setAssuranceSaisie] = useState("taux");
@@ -300,7 +329,10 @@ export default function App() {
   const reset = () => {
     setCapital(250000);
     setTaux(3.5);
+    setTauxVerrouille(false);
     setDureeAnnees(20);
+    setDureeVerrouille(false);
+    setDureeUnite("ans");
     setTauxAssurance(0.34);
     setModeAssurance("initial");
     setAssuranceSaisie("taux");
@@ -431,6 +463,13 @@ export default function App() {
     : -1;
 
   const decimals = afficherCentimes ? 2 : 0;
+
+  // Durée du prêt : stockée en années (dureeAnnees) quelle que soit l'unité affichée/saisie ;
+  // conversion automatique vers/depuis les mois pour l'affichage du curseur et du champ numérique.
+  const dureeAffichee = dureeUnite === "mois" ? Math.round(dureeAnnees * 12) : Math.round(dureeAnnees * 100) / 100;
+  const dureeMin = dureeUnite === "mois" ? 60 : 5;
+  const dureeMax = dureeUnite === "mois" ? 360 : 30;
+  const handleDureeChange = (v) => setDureeAnnees(dureeUnite === "mois" ? v / 12 : v);
 
   return (
     <div className="min-h-screen w-full" style={{ background: PAPER, fontFamily: "system-ui, -apple-system, sans-serif" }}>
@@ -607,8 +646,53 @@ export default function App() {
           {/* Formulaire */}
           <div className="lg:sticky lg:top-[104px] lg:self-start rounded-xl border p-4 space-y-4" style={{ borderColor: LINE, background: "#fff", height: "fit-content" }}>
             <NumberField label="Capital emprunté" value={capital} onChange={setCapital} step={1000} suffix="€" />
-            <SliderField label="Taux d'intérêt annuel" value={taux} onChange={setTaux} min={0.5} max={7} step={0.05} suffix=" %" tooltip="Taux nominal hors assurance, appliqué chaque mois au capital restant dû." />
-            <SliderField label="Durée du prêt" value={dureeAnnees} onChange={setDureeAnnees} min={5} max={30} step={1} suffix=" ans" />
+            <SliderField
+              label="Taux d'intérêt annuel"
+              value={taux}
+              onChange={setTaux}
+              min={0.5}
+              max={7}
+              step={0.05}
+              suffix="%"
+              tooltip="Taux nominal hors assurance, appliqué chaque mois au capital restant dû."
+              locked={tauxVerrouille}
+              onToggleLock={() => setTauxVerrouille((v) => !v)}
+            />
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px]" style={{ color: "#8A8371" }}>
+                  Unité de la durée
+                </span>
+                <div className="flex rounded overflow-hidden border text-[10.5px]" style={{ borderColor: LINE }}>
+                  <button
+                    onClick={() => setDureeUnite("ans")}
+                    className="px-2 py-1 transition-colors"
+                    style={{ background: dureeUnite === "ans" ? INK : "#fff", color: dureeUnite === "ans" ? PAPER : INK }}
+                  >
+                    Années
+                  </button>
+                  <button
+                    onClick={() => setDureeUnite("mois")}
+                    className="px-2 py-1 transition-colors"
+                    style={{ background: dureeUnite === "mois" ? INK : "#fff", color: dureeUnite === "mois" ? PAPER : INK }}
+                  >
+                    Mois
+                  </button>
+                </div>
+              </div>
+              <SliderField
+                label="Durée du prêt"
+                value={dureeAffichee}
+                onChange={handleDureeChange}
+                min={dureeMin}
+                max={dureeMax}
+                step={1}
+                suffix={dureeUnite === "mois" ? "mois" : "ans"}
+                locked={dureeVerrouille}
+                onToggleLock={() => setDureeVerrouille((v) => !v)}
+              />
+            </div>
             <DateField label="Date de début du prêt" value={dateDebut} onChange={setDateDebut} tooltip="Date de la première échéance. Le tableau d'amortissement est daté à partir de cette date." />
 
             <div className="pt-1 border-t" style={{ borderColor: LINE }}>
