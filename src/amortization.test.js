@@ -136,3 +136,120 @@ describe("computeAmortization — TAEG actuariel", () => {
     expect(avecAssurance.taeg).toBeGreaterThan(sansAssurance.taeg);
   });
 });
+
+describe("computeAmortization — remboursement anticipé", () => {
+  const ECHEANCE = 60;
+  const MONTANT = 20000;
+
+  it("le capital restant dû juste après le versement baisse exactement du montant versé, en plus de l'amortissement normal", () => {
+    const sansRemb = computeAmortization(baseParams);
+    const avecRemb = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: ECHEANCE, mode: "duree" },
+    });
+    const crdFinSansRemb = sansRemb.schedule[ECHEANCE - 1].crdFin;
+    const crdFinAvecRemb = avecRemb.schedule[ECHEANCE - 1].crdFin;
+    expect(crdFinSansRemb - crdFinAvecRemb).toBeCloseTo(MONTANT, 6);
+  });
+
+  it("l'échéance du versement porte le montant versé et le met en évidence via versementAnticipe > 0", () => {
+    const r = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: ECHEANCE, mode: "duree" },
+    });
+    const ligne = r.schedule[ECHEANCE - 1];
+    expect(ligne.versementAnticipe).toBeCloseTo(MONTANT, 6);
+    // Aucune autre échéance ne porte de versement anticipé
+    expect(r.schedule.filter((row) => row.versementAnticipe > 0)).toHaveLength(1);
+  });
+
+  it('mode "raccourcir la durée" : mensualité hors assurance inchangée, mais le prêt se termine avant le terme initial', () => {
+    const sansRemb = computeAmortization(baseParams);
+    const avecRemb = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: ECHEANCE, mode: "duree" },
+    });
+    // Mensualité (hors versement ponctuel) identique avant le versement
+    expect(avecRemb.schedule[0].mensualiteTotale).toBeCloseTo(sansRemb.schedule[0].mensualiteTotale, 6);
+    expect(avecRemb.schedule.length).toBeLessThan(sansRemb.schedule.length);
+    expect(avecRemb.schedule[avecRemb.schedule.length - 1].crdFin).toBe(0);
+  });
+
+  it('mode "réduire la mensualité" : la durée totale reste égale à la durée initiale', () => {
+    const sansRemb = computeAmortization(baseParams);
+    const avecRemb = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: ECHEANCE, mode: "mensualite" },
+    });
+    expect(avecRemb.schedule.length).toBe(sansRemb.schedule.length);
+    expect(avecRemb.schedule[avecRemb.schedule.length - 1].crdFin).toBe(0);
+  });
+
+  it('mode "réduire la mensualité" : la mensualité diminue strictement après le versement', () => {
+    const r = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: ECHEANCE, mode: "mensualite" },
+    });
+    const avant = r.schedule[ECHEANCE - 2].mensualiteTotale;
+    const apres = r.schedule[ECHEANCE].mensualiteTotale; // première échéance suivant le versement
+    expect(apres).toBeLessThan(avant);
+    expect(r.remboursementAnticipeInfo.nouvelleMensualite).toBeCloseTo(apres, 6);
+  });
+
+  it("un remboursement anticipé réduit toujours le total des intérêts payés par rapport au scénario sans versement", () => {
+    const sansRemb = computeAmortization(baseParams);
+    const avecRembDuree = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: ECHEANCE, mode: "duree" },
+    });
+    const avecRembMensualite = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: ECHEANCE, mode: "mensualite" },
+    });
+    expect(avecRembDuree.totalInterets).toBeLessThan(sansRemb.totalInterets);
+    expect(avecRembMensualite.totalInterets).toBeLessThan(sansRemb.totalInterets);
+  });
+
+  it("remboursementAnticipeInfo est renseigné avec l'échéance et le montant appliqué", () => {
+    const r = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: ECHEANCE, mode: "duree" },
+    });
+    expect(r.remboursementAnticipeInfo).not.toBeNull();
+    expect(r.remboursementAnticipeInfo.echeance).toBe(ECHEANCE);
+    expect(r.remboursementAnticipeInfo.montantApplique).toBeCloseTo(MONTANT, 6);
+    expect(r.remboursementAnticipeInfo.dureeReelleMois).toBe(r.schedule.length);
+  });
+
+  it("un versement supérieur au capital restant dû est plafonné, sans passer le solde en négatif", () => {
+    const enormeMontant = 999999999;
+    const r = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: enormeMontant, echeance: ECHEANCE, mode: "duree" },
+    });
+    const ligne = r.schedule[ECHEANCE - 1];
+    expect(ligne.crdFin).toBe(0);
+    expect(ligne.versementAnticipe).toBeLessThan(enormeMontant);
+    expect(r.schedule.length).toBe(ECHEANCE);
+  });
+
+  it("une échéance de versement hors plage (au-delà de la durée) est ignorée, comportement identique à sans versement", () => {
+    const sansRemb = computeAmortization(baseParams);
+    const avecEcheanceInvalide = computeAmortization({
+      ...baseParams,
+      remboursementAnticipe: { montant: MONTANT, echeance: 9999, mode: "duree" },
+    });
+    expect(avecEcheanceInvalide.schedule.length).toBe(sansRemb.schedule.length);
+    expect(avecEcheanceInvalide.totalInterets).toBeCloseTo(sansRemb.totalInterets, 6);
+    expect(avecEcheanceInvalide.remboursementAnticipeInfo).toBeNull();
+  });
+
+  it("sans remboursementAnticipe fourni, le comportement est strictement identique à avant (non-régression)", () => {
+    const a = computeAmortization(baseParams);
+    const b = computeAmortization({ ...baseParams, remboursementAnticipe: null });
+    expect(b.schedule.length).toBe(a.schedule.length);
+    expect(b.totalInterets).toBeCloseTo(a.totalInterets, 9);
+    expect(b.taeg).toBeCloseTo(a.taeg, 9);
+    expect(b.remboursementAnticipeInfo).toBeNull();
+  });
+});

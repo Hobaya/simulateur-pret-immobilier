@@ -33,6 +33,14 @@ function formatDate(d) {
   return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
 }
 
+function formatDureeMois(mois) {
+  const ans = Math.floor(mois / 12);
+  const reste = mois % 12;
+  if (ans === 0) return `${reste} mois`;
+  if (reste === 0) return `${ans} an${ans > 1 ? "s" : ""}`;
+  return `${ans} an${ans > 1 ? "s" : ""} ${reste} mois`;
+}
+
 function Tip({ text }) {
   return (
     <span className="group relative inline-flex items-center ml-1 align-middle">
@@ -178,6 +186,10 @@ export default function App() {
   const [afficherCentimes, setAfficherCentimes] = useState(true);
   const [fraisDossier, setFraisDossier] = useState(1200);
   const [dateDebut, setDateDebut] = useState(() => new Date().toISOString().slice(0, 10));
+  const [rembActif, setRembActif] = useState(false);
+  const [rembMontant, setRembMontant] = useState(10000);
+  const [rembEcheance, setRembEcheance] = useState(60);
+  const [rembMode, setRembMode] = useState("duree");
   const [age, setAge] = useState(38);
   const [baremes, setBaremes] = useState(DEFAULT_BAREMES);
   const [baremeSource, setBaremeSource] = useState(DEFAULT_SOURCE);
@@ -296,13 +308,53 @@ export default function App() {
     setAssuranceMontantTotal(15000);
     setFraisDossier(1200);
     setDateDebut(new Date().toISOString().slice(0, 10));
+    setRembActif(false);
+    setRembMontant(10000);
+    setRembEcheance(60);
+    setRembMode("duree");
     setSearch("");
     setCollapsedYears(new Set());
   };
 
-  const { schedule, mensualiteHorsAssurance, totalInterets, totalAssurance, coutTotal, taeg, years } = useMemo(() => {
+  const remboursementAnticipeParam = useMemo(() => {
+    if (!rembActif || !(rembMontant > 0) || !(rembEcheance >= 1)) return null;
+    return { montant: rembMontant, echeance: Math.round(rembEcheance), mode: rembMode };
+  }, [rembActif, rembMontant, rembEcheance, rembMode]);
+
+  const { schedule, mensualiteHorsAssurance, totalInterets, totalAssurance, coutTotal, taeg, years, remboursementAnticipeInfo } = useMemo(() => {
+    return computeAmortization({
+      capital,
+      taux,
+      dureeAnnees,
+      tauxAssurance,
+      modeAssurance,
+      assuranceSaisie,
+      assuranceMontantFixe,
+      assuranceMontantTotal,
+      fraisDossier,
+      dateDebut,
+      remboursementAnticipe: remboursementAnticipeParam,
+    });
+  }, [capital, taux, dureeAnnees, tauxAssurance, modeAssurance, fraisDossier, dateDebut, assuranceSaisie, assuranceMontantFixe, assuranceMontantTotal, remboursementAnticipeParam]);
+
+  // Scénario de référence sans le versement, utilisé uniquement pour chiffrer l'économie
+  // d'intérêts et le gain de durée — ne remplace pas le calcul TAEG/coût affiché ci-dessus,
+  // qui reste celui du scénario avec versement.
+  const sansRemboursement = useMemo(() => {
+    if (!remboursementAnticipeParam) return null;
     return computeAmortization({ capital, taux, dureeAnnees, tauxAssurance, modeAssurance, assuranceSaisie, assuranceMontantFixe, assuranceMontantTotal, fraisDossier, dateDebut });
-  }, [capital, taux, dureeAnnees, tauxAssurance, modeAssurance, fraisDossier, dateDebut, assuranceSaisie, assuranceMontantFixe, assuranceMontantTotal]);
+  }, [capital, taux, dureeAnnees, tauxAssurance, modeAssurance, fraisDossier, dateDebut, assuranceSaisie, assuranceMontantFixe, assuranceMontantTotal, remboursementAnticipeParam]);
+
+  const rembResultats = useMemo(() => {
+    if (!remboursementAnticipeParam || !sansRemboursement || !remboursementAnticipeInfo) return null;
+    return {
+      interetsEconomises: sansRemboursement.totalInterets - totalInterets,
+      gainDureeMois: sansRemboursement.schedule.length - schedule.length,
+      nouvelleMensualite: remboursementAnticipeInfo.nouvelleMensualite,
+      nouveauCoutTotal: coutTotal,
+      dureeReelleMois: schedule.length,
+    };
+  }, [remboursementAnticipeParam, sansRemboursement, remboursementAnticipeInfo, totalInterets, schedule.length, coutTotal]);
 
   const mensualiteTotale = schedule.length ? schedule[0].mensualiteTotale : 0;
   const assuranceMensuelle = schedule.length ? schedule[0].assurance : 0;
@@ -392,14 +444,14 @@ export default function App() {
           </p>
         </header>
 
-        {/* Résumé sticky */}
+        {/* Résumé — figé (sticky) à partir du breakpoint md uniquement ; défile normalement sur mobile */}
         <div
-          className="sticky top-2 z-30 rounded-xl mb-5 px-5 py-4 flex flex-wrap items-center gap-x-8 gap-y-3 shadow-sm"
+          className="md:sticky md:top-2 z-30 rounded-xl mb-5 px-5 py-4 flex flex-wrap items-center gap-x-8 gap-y-3 shadow-sm"
           style={{ background: INK, color: PAPER }}
         >
-          <div>
+          <div className="min-w-[180px]">
             <div className="text-[11px] uppercase tracking-wide opacity-60">Mensualité totale</div>
-            <div className="text-[28px] font-semibold leading-tight" style={{ color: GOLD_LIGHT, fontFamily: "Georgia, serif" }}>
+            <div className="text-[28px] font-semibold leading-tight tabular-nums" style={{ color: GOLD_LIGHT, fontFamily: "Georgia, serif" }}>
               {euros(mensualiteTotale, decimals)}
             </div>
           </div>
@@ -723,6 +775,53 @@ export default function App() {
 
             <NumberField label="Frais de dossier / garantie" value={fraisDossier} onChange={setFraisDossier} step={50} suffix="€" tooltip="Utilisés uniquement pour estimer le TAEG indicatif." />
 
+            <div className="rounded-md border p-2.5" style={{ borderColor: LINE, background: PAPER_ALT }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-medium uppercase tracking-wide" style={{ color: "#6B6455" }}>
+                  Remboursement anticipé
+                </span>
+                <button onClick={() => setRembActif((v) => !v)} className="flex items-center gap-1 text-[11px] hover:opacity-70" style={{ color: INK }}>
+                  {rembActif ? <Check size={12} /> : <Plus size={12} />}
+                  {rembActif ? "Désactiver" : "Activer"}
+                </button>
+              </div>
+
+              {rembActif && (
+                <div className="space-y-2 mt-2">
+                  <NumberField label="Montant versé" value={rembMontant} onChange={setRembMontant} step={500} suffix="€" />
+                  <NumberField
+                    label="À l'échéance n°"
+                    value={rembEcheance}
+                    onChange={setRembEcheance}
+                    step={1}
+                    min={1}
+                    tooltip="Numéro du mois auquel le versement est effectué (1 = première échéance)."
+                  />
+                  <div className="flex rounded-md overflow-hidden border text-[11px]" style={{ borderColor: LINE }}>
+                    <button
+                      onClick={() => setRembMode("duree")}
+                      className="flex-1 py-1.5 transition-colors"
+                      style={{ background: rembMode === "duree" ? INK : "#fff", color: rembMode === "duree" ? PAPER : INK }}
+                    >
+                      Raccourcir la durée
+                    </button>
+                    <button
+                      onClick={() => setRembMode("mensualite")}
+                      className="flex-1 py-1.5 transition-colors"
+                      style={{ background: rembMode === "mensualite" ? INK : "#fff", color: rembMode === "mensualite" ? PAPER : INK }}
+                    >
+                      Réduire la mensualité
+                    </button>
+                  </div>
+                  {rembEcheance > dureeAnnees * 12 && (
+                    <div className="text-[11px]" style={{ color: ROSE }}>
+                      Échéance au-delà de la durée du prêt : sans effet.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <button
               onClick={reset}
               className="w-full flex items-center justify-center gap-1.5 text-[12px] font-medium rounded-md py-2 border transition-colors hover:opacity-80"
@@ -784,6 +883,59 @@ export default function App() {
               </div>
             </div>
 
+            {rembResultats && (
+              <div className="rounded-xl border p-4" style={{ borderColor: LINE, background: "#fff" }}>
+                <h2 className="text-[13px] font-semibold mb-3" style={{ color: INK, fontFamily: "Georgia, serif" }}>
+                  Impact du remboursement anticipé (échéance n°{remboursementAnticipeInfo.echeance})
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                      Intérêts économisés
+                    </div>
+                    <div className="text-[15px] font-semibold tabular-nums" style={{ color: GREEN }}>
+                      {euros(rembResultats.interetsEconomises, decimals)}
+                    </div>
+                  </div>
+                  {rembMode === "duree" ? (
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                        Gain de durée
+                      </div>
+                      <div className="text-[15px] font-semibold" style={{ color: INK }}>
+                        {formatDureeMois(rembResultats.gainDureeMois)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                        Nouvelle mensualité
+                      </div>
+                      <div className="text-[15px] font-semibold tabular-nums" style={{ color: INK }}>
+                        {euros(rembResultats.nouvelleMensualite, decimals)}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                      Nouveau coût total
+                    </div>
+                    <div className="text-[15px] font-semibold tabular-nums" style={{ color: INK }}>
+                      {euros(rembResultats.nouveauCoutTotal, decimals)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                      Nouvelle durée réelle
+                    </div>
+                    <div className="text-[15px] font-semibold" style={{ color: INK }}>
+                      {formatDureeMois(rembResultats.dureeReelleMois)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Tableau */}
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: LINE, background: "#fff" }}>
               <div className="flex items-center justify-between gap-2 p-3 border-b" style={{ borderColor: LINE }}>
@@ -842,12 +994,13 @@ export default function App() {
                             y.rows.map((r, idx) => {
                               const pct = r.crdFin / capital;
                               const isCurrent = schedule[currentMonthIdx] && r.n === schedule[currentMonthIdx].n;
+                              const isRemboursement = r.versementAnticipe > 0;
                               return (
                                 <tr
                                   key={r.n}
                                   className="relative hover:brightness-95"
                                   style={{
-                                    background: isCurrent ? "#FBF2DE" : idx % 2 === 0 ? "#fff" : "#FCFBF8",
+                                    background: isRemboursement ? "rgba(75,122,91,0.14)" : isCurrent ? "#FBF2DE" : idx % 2 === 0 ? "#fff" : "#FCFBF8",
                                   }}
                                 >
                                   <td className="px-3 py-1.5" style={{ color: "#8A8371" }}>{r.n}</td>
@@ -856,7 +1009,14 @@ export default function App() {
                                   <td className="px-3 py-1.5 text-right" style={{ color: ROSE }}>{euros(r.interets, decimals)}</td>
                                   <td className="px-3 py-1.5 text-right" style={{ color: GOLD }}>{euros(r.assurance, decimals)}</td>
                                   <td className="px-3 py-1.5 text-right" style={{ color: GREEN }}>{euros(r.capitalAmorti, decimals)}</td>
-                                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: INK }}>{euros(r.mensualiteTotale, decimals)}</td>
+                                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: INK }}>
+                                    {euros(r.mensualiteTotale, decimals)}
+                                    {isRemboursement && (
+                                      <div className="text-[9.5px] font-normal whitespace-nowrap" style={{ color: GREEN }}>
+                                        dont {euros(r.versementAnticipe, decimals)} versement anticipé
+                                      </div>
+                                    )}
+                                  </td>
                                   <td className="px-3 py-1.5 text-right" style={{ color: "#6B6455" }}>
                                     <span className="relative z-10">{euros(r.crdFin, decimals)}</span>
                                     <span

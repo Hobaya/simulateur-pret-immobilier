@@ -85,7 +85,20 @@ export function computeAmortization(p) {
 
   const assuranceMensuelleTotalDuree = n > 0 ? p.assuranceMontantTotal / n : 0;
 
+  // Remboursement anticipé (facultatif) : un versement ponctuel à une échéance donnée,
+  // qui soit raccourcit la durée (mensualité inchangée), soit réduit la mensualité des
+  // échéances suivantes (durée contractuelle inchangée). N'affecte en rien le calcul du
+  // TAEG actuariel lui-même (computeTaegActuariel, non modifié) : celui-ci continue de
+  // travailler sur les mensualités réellement payées, versement compris.
+  const remb = p.remboursementAnticipe;
+  const rembActif = !!(remb && remb.montant > 0 && Number.isInteger(remb.echeance) && remb.echeance >= 1 && remb.echeance <= n);
+  const rembMode = remb && remb.mode === "mensualite" ? "mensualite" : "duree";
+  let mensualiteCourante = M;
+  let remboursementAnticipeInfo = null;
+
   for (let i = 1; i <= n; i++) {
+    if (crd <= 1e-9) break;
+
     const interets = crd * t;
     const assurance =
       p.assuranceSaisie === "montant"
@@ -95,10 +108,41 @@ export function computeAmortization(p) {
         : p.modeAssurance === "initial"
         ? assuranceMensuelleInitiale
         : (crd * p.tauxAssurance) / 100 / 12;
-    let capitalAmorti = M - interets;
-    if (i === n) capitalAmorti = crd;
+
+    let capitalAmorti = mensualiteCourante - interets;
+    if (capitalAmorti > crd) capitalAmorti = crd;
+    if (capitalAmorti < 0) capitalAmorti = 0;
     const crdDebut = crd;
-    crd = Math.max(0, crd - capitalAmorti);
+    crd = crd - capitalAmorti;
+
+    let versementAnticipe = 0;
+    if (rembActif && i === remb.echeance && crd > 1e-9) {
+      versementAnticipe = Math.min(remb.montant, crd);
+      crd = crd - versementAnticipe;
+      if (rembMode === "mensualite") {
+        const moisRestants = n - i;
+        mensualiteCourante =
+          moisRestants > 0 && crd > 1e-9
+            ? t === 0
+              ? crd / moisRestants
+              : (crd * t) / (1 - Math.pow(1 + t, -moisRestants))
+            : 0;
+      }
+      remboursementAnticipeInfo = {
+        echeance: i,
+        montantApplique: versementAnticipe,
+        nouvelleMensualite: rembMode === "mensualite" ? mensualiteCourante : null,
+      };
+    }
+
+    // Dernière échéance (terme contractuel n, ou solde soldé plus tôt en mode "durée") :
+    // on absorbe tout résidu flottant pour finir exactement à zéro.
+    if (i === n && crd > 1e-9) {
+      capitalAmorti += crd;
+      crd = 0;
+    }
+    if (crd < 1e-9) crd = 0;
+
     sumInterets += interets;
     sumAssurance += assurance;
     const d = new Date(start.getFullYear(), start.getMonth() + i, start.getDate());
@@ -110,9 +154,14 @@ export function computeAmortization(p) {
       interets,
       assurance,
       capitalAmorti,
-      mensualiteTotale: capitalAmorti + interets + assurance,
+      versementAnticipe,
+      mensualiteTotale: capitalAmorti + interets + assurance + versementAnticipe,
       crdFin: crd,
     });
+  }
+
+  if (remboursementAnticipeInfo) {
+    remboursementAnticipeInfo.dureeReelleMois = rows.length;
   }
 
   const yearMap = new Map();
@@ -143,5 +192,6 @@ export function computeAmortization(p) {
     taeg,
     coutAnnualiseSimplifie,
     years: yearsArr,
+    remboursementAnticipeInfo,
   };
 }
