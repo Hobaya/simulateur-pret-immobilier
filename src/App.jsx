@@ -20,7 +20,7 @@ const DEFAULT_BAREMES = [
 ];
 const DEFAULT_SOURCE = "Comparateurs de marché (Meilleurtaux, Covelia, Qivio...)";
 
-function euros(n, decimals = 0) {
+export function euros(n, decimals = 0) {
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
     currency: "EUR",
@@ -144,6 +144,28 @@ function SliderField({ label, value, onChange, min, max, step, suffix, tooltip }
   );
 }
 
+function CentimesToggle({ checked, onChange }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      aria-pressed={checked}
+      className="flex items-center gap-2"
+    >
+      <span className="text-[11px] uppercase tracking-wide opacity-60">Afficher les centimes</span>
+      <span
+        className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+        style={{ background: checked ? GOLD : "rgba(247,244,238,0.25)" }}
+      >
+        <span
+          className="inline-block h-3.5 w-3.5 rounded-full transition-transform"
+          style={{ background: PAPER, transform: checked ? "translateX(18px)" : "translateX(2px)" }}
+        />
+      </span>
+    </button>
+  );
+}
+
 export default function App() {
   const [capital, setCapital] = useState(250000);
   const [taux, setTaux] = useState(3.5);
@@ -152,6 +174,8 @@ export default function App() {
   const [modeAssurance, setModeAssurance] = useState("initial");
   const [assuranceSaisie, setAssuranceSaisie] = useState("taux");
   const [assuranceMontantFixe, setAssuranceMontantFixe] = useState(70);
+  const [assuranceMontantTotal, setAssuranceMontantTotal] = useState(15000);
+  const [afficherCentimes, setAfficherCentimes] = useState(true);
   const [fraisDossier, setFraisDossier] = useState(1200);
   const [dateDebut, setDateDebut] = useState(() => new Date().toISOString().slice(0, 10));
   const [age, setAge] = useState(38);
@@ -207,6 +231,7 @@ export default function App() {
     modeAssurance,
     assuranceSaisie,
     assuranceMontantFixe,
+    assuranceMontantTotal,
     fraisDossier,
     dateDebut,
   });
@@ -268,6 +293,7 @@ export default function App() {
     setModeAssurance("initial");
     setAssuranceSaisie("taux");
     setAssuranceMontantFixe(70);
+    setAssuranceMontantTotal(15000);
     setFraisDossier(1200);
     setDateDebut(new Date().toISOString().slice(0, 10));
     setSearch("");
@@ -275,8 +301,8 @@ export default function App() {
   };
 
   const { schedule, mensualiteHorsAssurance, totalInterets, totalAssurance, coutTotal, taeg, years } = useMemo(() => {
-    return computeAmortization({ capital, taux, dureeAnnees, tauxAssurance, modeAssurance, assuranceSaisie, assuranceMontantFixe, fraisDossier, dateDebut });
-  }, [capital, taux, dureeAnnees, tauxAssurance, modeAssurance, fraisDossier, dateDebut, assuranceSaisie, assuranceMontantFixe]);
+    return computeAmortization({ capital, taux, dureeAnnees, tauxAssurance, modeAssurance, assuranceSaisie, assuranceMontantFixe, assuranceMontantTotal, fraisDossier, dateDebut });
+  }, [capital, taux, dureeAnnees, tauxAssurance, modeAssurance, fraisDossier, dateDebut, assuranceSaisie, assuranceMontantFixe, assuranceMontantTotal]);
 
   const mensualiteTotale = schedule.length ? schedule[0].mensualiteTotale : 0;
   const assuranceMensuelle = schedule.length ? schedule[0].assurance : 0;
@@ -352,6 +378,8 @@ export default function App() {
     ? schedule.findIndex((r) => r.date.getMonth() === new Date().getMonth() && r.date.getFullYear() === new Date().getFullYear())
     : -1;
 
+  const decimals = afficherCentimes ? 2 : 0;
+
   return (
     <div className="min-h-screen w-full" style={{ background: PAPER, fontFamily: "system-ui, -apple-system, sans-serif" }}>
       <div className="max-w-6xl mx-auto px-4 py-6">
@@ -372,14 +400,16 @@ export default function App() {
           <div>
             <div className="text-[11px] uppercase tracking-wide opacity-60">Mensualité totale</div>
             <div className="text-[28px] font-semibold leading-tight" style={{ color: GOLD_LIGHT, fontFamily: "Georgia, serif" }}>
-              {euros(mensualiteTotale, 0)}
+              {euros(mensualiteTotale, decimals)}
             </div>
           </div>
           <div className="h-9 w-px opacity-20" style={{ background: PAPER }} />
-          <Stat label="Capital emprunté" value={euros(capital, 0)} />
+          <Stat label="Capital emprunté" value={euros(capital, decimals)} />
           <Stat label="Durée" value={`${dureeAnnees} ans (${schedule.length} mois)`} />
-          <Stat label="Coût total du crédit" value={euros(coutTotal, 0)} />
-          <Stat label="TAEG indicatif" value={`${taeg.toFixed(2)} %`} sub="non normé" />
+          <Stat label="Coût total du crédit" value={euros(coutTotal, decimals)} />
+          <Stat label="TAEG indicatif" value={`${taeg.toFixed(3)} %`} sub="non normé" />
+          <div className="h-9 w-px opacity-20" style={{ background: PAPER }} />
+          <CentimesToggle checked={afficherCentimes} onChange={setAfficherCentimes} />
           <button
             onClick={() => (showComparateur ? setShowComparateur(false) : openComparateur())}
             className="ml-auto flex items-center gap-1.5 text-[12px] font-medium rounded-md px-3 py-1.5 border transition-colors hover:opacity-80"
@@ -428,6 +458,8 @@ export default function App() {
                     <MiniField label="Durée" value={s.dureeAnnees} onChange={(v) => updateScenario(s.id, "dureeAnnees", v)} suffix="ans" step={1} />
                     {s.assuranceSaisie === "montant" ? (
                       <MiniField label="Assurance" value={s.assuranceMontantFixe} onChange={(v) => updateScenario(s.id, "assuranceMontantFixe", v)} suffix="€/mois" step={1} />
+                    ) : s.assuranceSaisie === "totalDuree" ? (
+                      <MiniField label="Ass. totale" value={s.assuranceMontantTotal} onChange={(v) => updateScenario(s.id, "assuranceMontantTotal", v)} suffix="€" step={100} />
                     ) : (
                       <MiniField label="Ass. taux" value={s.tauxAssurance} onChange={(v) => updateScenario(s.id, "tauxAssurance", v)} suffix="%" step={0.01} />
                     )}
@@ -452,7 +484,7 @@ export default function App() {
                   <div className="mt-3 pt-2 border-t" style={{ borderColor: LINE }}>
                     <div className="text-[11px]" style={{ color: "#8A8371" }}>Mensualité</div>
                     <div className="text-[17px] font-semibold" style={{ color: s.color, fontFamily: "Georgia, serif" }}>
-                      {euros(s.result.mensualiteTotale, 0)}
+                      {euros(s.result.mensualiteTotale, decimals)}
                     </div>
                   </div>
                 </div>
@@ -475,12 +507,12 @@ export default function App() {
                     </thead>
                     <tbody>
                       {[
-                        { label: "Mensualité totale", get: (s) => euros(s.result.mensualiteTotale, 0) },
+                        { label: "Mensualité totale", get: (s) => euros(s.result.mensualiteTotale, decimals) },
                         { label: "Durée", get: (s) => `${s.dureeAnnees} ans` },
-                        { label: "Coût des intérêts", get: (s) => euros(s.result.totalInterets, 0) },
-                        { label: "Coût de l'assurance", get: (s) => euros(s.result.totalAssurance, 0) },
-                        { label: "Coût total du crédit", get: (s) => euros(s.result.coutTotal, 0) },
-                        { label: "TAEG indicatif", get: (s) => `${s.result.taeg.toFixed(2)} %` },
+                        { label: "Coût des intérêts", get: (s) => euros(s.result.totalInterets, decimals) },
+                        { label: "Coût de l'assurance", get: (s) => euros(s.result.totalAssurance, decimals) },
+                        { label: "Coût total du crédit", get: (s) => euros(s.result.coutTotal, decimals) },
+                        { label: "TAEG indicatif", get: (s) => `${s.result.taeg.toFixed(3)} %` },
                       ].map((row) => (
                         <tr key={row.label} className="border-t" style={{ borderColor: LINE }}>
                           <td className="px-3 py-1.5" style={{ color: INK }}>{row.label}</td>
@@ -505,7 +537,7 @@ export default function App() {
                         <CartesianGrid stroke={LINE} strokeDasharray="2 4" vertical={false} />
                         <XAxis dataKey="mois" tick={{ fontSize: 10, fill: "#8A8371" }} tickFormatter={(v) => `${v}m`} axisLine={{ stroke: LINE }} tickLine={false} />
                         <YAxis tick={{ fontSize: 10, fill: "#8A8371" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-                        <Tooltip formatter={(v) => euros(v, 0)} labelFormatter={(v) => `Mois ${v}`} contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: LINE }} />
+                        <Tooltip formatter={(v) => euros(v, decimals)} labelFormatter={(v) => `Mois ${v}`} contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: LINE }} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
                         {scenarioResults.map((s) => (
                           <Line key={s.id} type="monotone" dataKey={s.label} stroke={s.color} strokeWidth={1.75} dot={false} />
@@ -547,6 +579,13 @@ export default function App() {
                 >
                   Montant fixe €/mois
                 </button>
+                <button
+                  onClick={() => setAssuranceSaisie("totalDuree")}
+                  className="flex-1 py-1.5 transition-colors"
+                  style={{ background: assuranceSaisie === "totalDuree" ? INK : "#fff", color: assuranceSaisie === "totalDuree" ? PAPER : INK }}
+                >
+                  Total sur la durée
+                </button>
               </div>
 
               {assuranceSaisie === "taux" ? (
@@ -573,13 +612,22 @@ export default function App() {
                   </div>
                   <NumberField label="Taux d'assurance annuel" value={tauxAssurance} onChange={setTauxAssurance} step={0.01} suffix="%" />
                 </>
-              ) : (
+              ) : assuranceSaisie === "montant" ? (
                 <NumberField label="Montant mensuel de l'assurance" value={assuranceMontantFixe} onChange={setAssuranceMontantFixe} step={1} suffix="€/mois" />
+              ) : (
+                <NumberField
+                  label="Coût total de l'assurance sur la durée"
+                  value={assuranceMontantTotal}
+                  onChange={setAssuranceMontantTotal}
+                  step={100}
+                  suffix="€"
+                  tooltip="Montant total communiqué par ta banque pour toute la durée du prêt. Réparti automatiquement en mensualité constante (montant ÷ nombre de mois)."
+                />
               )}
             </div>
 
             <div className="text-[11.5px] rounded-md px-2.5 py-1.5" style={{ background: PAPER_ALT, color: "#6B6455" }}>
-              Assurance ce mois-ci : <strong style={{ color: INK }}>{euros(assuranceMensuelle, 2)}</strong>
+              Assurance ce mois-ci : <strong style={{ color: INK }}>{euros(assuranceMensuelle, decimals)}</strong>
             </div>
 
             <div className="pt-1 border-t" style={{ borderColor: LINE }}>
@@ -613,7 +661,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="text-[11px] mb-1.5" style={{ color: "#8A8371" }}>
-                  Repère non applicable en saisie "montant fixe".
+                  Repère non applicable hors saisie "% du capital".
                 </div>
               )}
 
@@ -700,7 +748,7 @@ export default function App() {
                           <Cell key={i} fill={e.color} stroke="#fff" strokeWidth={1} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v) => euros(v, 0)} />
+                      <Tooltip formatter={(v) => euros(v, decimals)} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -711,7 +759,7 @@ export default function App() {
                         <span className="inline-block w-2 h-2 rounded-full" style={{ background: e.color }} />
                         {e.name}
                       </span>
-                      <span style={{ color: "#8A8371" }}>{euros(e.value, 0)}</span>
+                      <span style={{ color: "#8A8371" }}>{euros(e.value, decimals)}</span>
                     </div>
                   ))}
                 </div>
@@ -727,7 +775,7 @@ export default function App() {
                       <CartesianGrid stroke={LINE} strokeDasharray="2 4" vertical={false} />
                       <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#8A8371" }} interval="preserveStartEnd" axisLine={{ stroke: LINE }} tickLine={false} />
                       <YAxis tick={{ fontSize: 10, fill: "#8A8371" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-                      <Tooltip formatter={(v) => euros(v, 0)} contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: LINE }} />
+                      <Tooltip formatter={(v) => euros(v, decimals)} contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: LINE }} />
                       <Area type="monotone" dataKey="Capital restant dû" stroke={INK} fill={INK} fillOpacity={0.12} strokeWidth={1.5} />
                       <Area type="monotone" dataKey="Intérêts cumulés" stroke={ROSE} fill={ROSE} fillOpacity={0.12} strokeWidth={1.5} />
                     </AreaChart>
@@ -784,11 +832,11 @@ export default function App() {
                               {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />} {y.annee}
                             </td>
                             <td className="px-3 py-1.5 text-right" style={{ color: "#8A8371" }}>—</td>
-                            <td className="px-3 py-1.5 text-right" style={{ color: ROSE }}>{euros(y.totalInterets, 0)}</td>
-                            <td className="px-3 py-1.5 text-right" style={{ color: GOLD }}>{euros(y.totalAssurance, 0)}</td>
-                            <td className="px-3 py-1.5 text-right" style={{ color: GREEN }}>{euros(y.totalCapital, 0)}</td>
+                            <td className="px-3 py-1.5 text-right" style={{ color: ROSE }}>{euros(y.totalInterets, decimals)}</td>
+                            <td className="px-3 py-1.5 text-right" style={{ color: GOLD }}>{euros(y.totalAssurance, decimals)}</td>
+                            <td className="px-3 py-1.5 text-right" style={{ color: GREEN }}>{euros(y.totalCapital, decimals)}</td>
                             <td className="px-3 py-1.5 text-right" style={{ color: "#8A8371" }}>—</td>
-                            <td className="px-3 py-1.5 text-right font-medium" style={{ color: INK }}>{euros(y.crdFin, 0)}</td>
+                            <td className="px-3 py-1.5 text-right font-medium" style={{ color: INK }}>{euros(y.crdFin, decimals)}</td>
                           </tr>
                           {!collapsed &&
                             y.rows.map((r, idx) => {
@@ -804,13 +852,13 @@ export default function App() {
                                 >
                                   <td className="px-3 py-1.5" style={{ color: "#8A8371" }}>{r.n}</td>
                                   <td className="px-3 py-1.5" style={{ color: INK }}>{formatDate(r.date)}</td>
-                                  <td className="px-3 py-1.5 text-right" style={{ color: "#6B6455" }}>{euros(r.crdDebut, 0)}</td>
-                                  <td className="px-3 py-1.5 text-right" style={{ color: ROSE }}>{euros(r.interets, 0)}</td>
-                                  <td className="px-3 py-1.5 text-right" style={{ color: GOLD }}>{euros(r.assurance, 0)}</td>
-                                  <td className="px-3 py-1.5 text-right" style={{ color: GREEN }}>{euros(r.capitalAmorti, 0)}</td>
-                                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: INK }}>{euros(r.mensualiteTotale, 0)}</td>
+                                  <td className="px-3 py-1.5 text-right" style={{ color: "#6B6455" }}>{euros(r.crdDebut, decimals)}</td>
+                                  <td className="px-3 py-1.5 text-right" style={{ color: ROSE }}>{euros(r.interets, decimals)}</td>
+                                  <td className="px-3 py-1.5 text-right" style={{ color: GOLD }}>{euros(r.assurance, decimals)}</td>
+                                  <td className="px-3 py-1.5 text-right" style={{ color: GREEN }}>{euros(r.capitalAmorti, decimals)}</td>
+                                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: INK }}>{euros(r.mensualiteTotale, decimals)}</td>
                                   <td className="px-3 py-1.5 text-right" style={{ color: "#6B6455" }}>
-                                    <span className="relative z-10">{euros(r.crdFin, 0)}</span>
+                                    <span className="relative z-10">{euros(r.crdFin, decimals)}</span>
                                     <span
                                       className="absolute left-0 top-0 bottom-0"
                                       style={{ width: `${pct * 100}%`, background: INK, opacity: 0.04 }}

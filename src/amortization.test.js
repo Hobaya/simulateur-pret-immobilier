@@ -91,6 +91,24 @@ describe("computeAmortization — assurance emprunteur", () => {
     const r = computeAmortization({ ...baseParams, assuranceSaisie: "montant", assuranceMontantFixe: 42 });
     expect(r.schedule.every((row) => row.assurance === 42)).toBe(true);
   });
+
+  it("total sur la durée : la cotisation mensuelle est le montant total divisé par le nombre d'échéances", () => {
+    const r = computeAmortization({ ...baseParams, assuranceSaisie: "totalDuree", assuranceMontantTotal: 15000 });
+    const attendu = 15000 / 240;
+    expect(r.schedule.every((row) => Math.abs(row.assurance - attendu) < 1e-9)).toBe(true);
+  });
+
+  it("total sur la durée : la somme des cotisations mensuelles reconstitue le montant total saisi", () => {
+    const r = computeAmortization({ ...baseParams, assuranceSaisie: "totalDuree", assuranceMontantTotal: 15000 });
+    expect(r.totalAssurance).toBeCloseTo(15000, 6);
+  });
+
+  it("total sur la durée : équivaut à un montant fixe égal à total ÷ durée (même mensualité, même TAEG)", () => {
+    const total = computeAmortization({ ...baseParams, assuranceSaisie: "totalDuree", assuranceMontantTotal: 12000 });
+    const fixe = computeAmortization({ ...baseParams, assuranceSaisie: "montant", assuranceMontantFixe: 12000 / 240 });
+    expect(total.mensualiteTotale).toBeCloseTo(fixe.mensualiteTotale, 6);
+    expect(total.taeg).toBeCloseTo(fixe.taeg, 6);
+  });
 });
 
 describe("computeAmortization — TAEG actuariel", () => {
@@ -109,6 +127,12 @@ describe("computeAmortization — TAEG actuariel", () => {
   it("le TAEG augmente avec l'ajout d'une assurance emprunteur", () => {
     const sansAssurance = computeAmortization({ ...baseParams, tauxAssurance: 0 });
     const avecAssurance = computeAmortization({ ...baseParams, tauxAssurance: 0.34 });
+    expect(avecAssurance.taeg).toBeGreaterThan(sansAssurance.taeg);
+  });
+
+  it("le TAEG augmente avec une assurance saisie en total sur la durée", () => {
+    const sansAssurance = computeAmortization({ ...baseParams, assuranceSaisie: "totalDuree", assuranceMontantTotal: 0 });
+    const avecAssurance = computeAmortization({ ...baseParams, assuranceSaisie: "totalDuree", assuranceMontantTotal: 15000 });
     expect(avecAssurance.taeg).toBeGreaterThan(sansAssurance.taeg);
   });
 });

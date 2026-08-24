@@ -83,11 +83,15 @@ export function computeAmortization(p) {
   let sumAssurance = 0;
   const start = p.dateDebut ? new Date(p.dateDebut) : new Date();
 
+  const assuranceMensuelleTotalDuree = n > 0 ? p.assuranceMontantTotal / n : 0;
+
   for (let i = 1; i <= n; i++) {
     const interets = crd * t;
     const assurance =
       p.assuranceSaisie === "montant"
         ? p.assuranceMontantFixe
+        : p.assuranceSaisie === "totalDuree"
+        ? assuranceMensuelleTotalDuree
         : p.modeAssurance === "initial"
         ? assuranceMensuelleInitiale
         : (crd * p.tauxAssurance) / 100 / 12;
