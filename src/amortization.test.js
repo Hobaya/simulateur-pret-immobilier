@@ -299,8 +299,13 @@ describe("computeRachatCredit", () => {
     expect(r.crdRachat).toBeCloseTo(217761.54, 1);
     expect(r.iraAppliquee).toBeCloseTo(4355.23, 1); // plafond 6 mois d'intérêts, plus petit que 3 % du CRD
     expect(r.nouveauCapital).toBeCloseTo(224116.77, 1);
-    expect(r.nouvelleMensualite).toBeCloseTo(1242.95, 1);
+    // "Avant" (si maintien dans le prêt actuel)
+    expect(r.mensualiteActuelle).toBeCloseTo(1319.59, 1);
+    expect(r.dureeRestanteMois).toBe(300 - 60);
     expect(r.coutRestantSiMaintien).toBeCloseTo(98940.56, 1);
+    // "Après" (nouveau prêt issu du rachat)
+    expect(r.nouvelleMensualite).toBeCloseTo(1242.95, 1);
+    expect(r.dureeNouveauPretMois).toBe(240);
     expect(r.coutNouveauPret).toBeCloseTo(74190.32, 1);
     expect(r.gainNet).toBeCloseTo(18395.01, 1);
     expect(r.avantageux).toBe(true);

@@ -646,12 +646,78 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-lg border p-3" style={{ borderColor: LINE, background: PAPER_ALT }}>
+                        <div className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: "#6B6455" }}>
+                          Avant — si tu restes dans le prêt actuel
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11.5px]" style={{ color: "#8A8371" }}>
+                              Mensualité
+                            </span>
+                            <span className="text-[13px] font-semibold tabular-nums" style={{ color: INK }}>
+                              {euros(rachatResultat.mensualiteActuelle, decimals)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11.5px]" style={{ color: "#8A8371" }}>
+                              Durée restante
+                            </span>
+                            <span className="text-[13px] font-semibold" style={{ color: INK }}>
+                              {formatDureeMois(rachatResultat.dureeRestanteMois)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11.5px]" style={{ color: "#8A8371" }}>
+                              Coût restant (int. + assur.)
+                            </span>
+                            <span className="text-[13px] font-semibold tabular-nums" style={{ color: INK }}>
+                              {euros(rachatResultat.coutRestantSiMaintien, decimals)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border-2 p-3" style={{ borderColor: GOLD, background: "#fff" }}>
+                        <div className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: GOLD }}>
+                          Après — si tu rachètes le crédit
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11.5px]" style={{ color: "#8A8371" }}>
+                              Mensualité
+                            </span>
+                            <span className="text-[13px] font-semibold tabular-nums" style={{ color: INK }}>
+                              {euros(rachatResultat.nouvelleMensualite, decimals)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11.5px]" style={{ color: "#8A8371" }}>
+                              Durée du nouveau prêt
+                            </span>
+                            <span className="text-[13px] font-semibold" style={{ color: INK }}>
+                              {formatDureeMois(rachatResultat.dureeNouveauPretMois)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11.5px]" style={{ color: "#8A8371" }}>
+                              Coût du nouveau prêt (int. + assur.)
+                            </span>
+                            <span className="text-[13px] font-semibold tabular-nums" style={{ color: INK }}>
+                              {euros(rachatResultat.coutNouveauPret, decimals)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
-                          CRD au rachat
+                          Capital restant dû à racheter
                         </div>
-                        <div className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
+                        <div className="text-[13px] font-semibold tabular-nums" style={{ color: INK }}>
                           {euros(rachatResultat.crdRachat, decimals)}
                         </div>
                       </div>
@@ -659,24 +725,8 @@ export default function App() {
                         <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
                           Nouveau capital emprunté
                         </div>
-                        <div className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
+                        <div className="text-[13px] font-semibold tabular-nums" style={{ color: INK }}>
                           {euros(rachatResultat.nouveauCapital, decimals)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
-                          Nouvelle mensualité
-                        </div>
-                        <div className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
-                          {euros(rachatResultat.nouvelleMensualite, decimals)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
-                          Durée totale (rachat inclus)
-                        </div>
-                        <div className="text-[14px] font-semibold" style={{ color: INK }}>
-                          {formatDureeMois(rachatResultat.dureeTotaleMois)}
                         </div>
                       </div>
                     </div>

@@ -263,10 +263,15 @@ export function computeRachatCredit(p) {
     iraLegale,
     iraAppliquee,
     nouveauCapital,
-    nouvelleMensualite: nouveauPret.mensualiteTotale,
-    dureeTotaleMois: echeance + nouveauPret.schedule.length,
+    // "Avant" : situation si l'emprunteur reste dans le prêt actuel à partir de l'échéance du rachat.
+    mensualiteActuelle: baseline.mensualiteTotale,
+    dureeRestanteMois: n - echeance,
     coutRestantSiMaintien,
+    // "Après" : situation avec le nouveau prêt issu du rachat.
+    nouvelleMensualite: nouveauPret.mensualiteTotale,
+    dureeNouveauPretMois: nouveauPret.schedule.length,
     coutNouveauPret,
+    dureeTotaleMois: echeance + nouveauPret.schedule.length,
     gainNet,
     avantageux: gainNet > 0,
   };
