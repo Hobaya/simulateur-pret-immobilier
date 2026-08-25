@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeAmortization, computeRachatCredit } from "./amortization.js";
+import { computeAmortization, computeRachatCredit, findPointBascule } from "./amortization.js";
 
 const baseParams = {
   capital: 100000,
@@ -351,5 +351,47 @@ describe("computeRachatCredit", () => {
     const apres = computeAmortization(pretActuel);
     expect(apres.schedule.length).toBe(avant.schedule.length);
     expect(apres.totalInterets).toBeCloseTo(avant.totalInterets, 9);
+  });
+});
+
+describe("findPointBascule — vision patrimoine", () => {
+  it("sur le cas de référence (100 000 €/3 %/20 ans), un point de bascule existe avant la fin du prêt", () => {
+    const { schedule } = computeAmortization(baseParams);
+    const bascule = findPointBascule(schedule);
+
+    expect(bascule).not.toBeNull();
+    expect(bascule.n).toBeGreaterThanOrEqual(1);
+    expect(bascule.n).toBeLessThan(schedule.length);
+    expect(bascule.capitalAmorti).toBeGreaterThan(bascule.interets + bascule.assurance);
+  });
+
+  it("aucune échéance avant le point de bascule n'a déjà basculé (c'est bien la première)", () => {
+    const { schedule } = computeAmortization(baseParams);
+    const bascule = findPointBascule(schedule);
+    for (const r of schedule) {
+      if (r.n >= bascule.n) break;
+      expect(r.capitalAmorti).toBeLessThanOrEqual(r.interets + r.assurance);
+    }
+  });
+
+  it("une fois basculé, le capital amorti reste durablement supérieur aux intérêts + assurance (mensualité constante, prêt sans assurance dégressive)", () => {
+    const { schedule } = computeAmortization(baseParams);
+    const bascule = findPointBascule(schedule);
+    for (const r of schedule) {
+      if (r.n < bascule.n) continue;
+      expect(r.capitalAmorti).toBeGreaterThanOrEqual(r.interets + r.assurance);
+    }
+  });
+
+  it("intérêts décroissants et capital amorti croissant au fil du temps, pour un prêt à mensualité constante", () => {
+    const { schedule } = computeAmortization(baseParams);
+    for (let i = 1; i < schedule.length; i++) {
+      expect(schedule[i].interets).toBeLessThanOrEqual(schedule[i - 1].interets + 1e-9);
+      expect(schedule[i].capitalAmorti).toBeGreaterThanOrEqual(schedule[i - 1].capitalAmorti - 1e-9);
+    }
+  });
+
+  it("aucune échéance : renvoie null sans planter (prêt vide)", () => {
+    expect(findPointBascule([])).toBeNull();
   });
 });

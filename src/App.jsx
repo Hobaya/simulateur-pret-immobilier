@@ -1,16 +1,16 @@
 import React, { useState, useMemo } from "react";
-import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
-import { Info, Download, RotateCcw, Search, ChevronDown, ChevronRight, Printer, Pencil, Check, RefreshCw, Plus, X, Copy, SplitSquareHorizontal, Lock, Unlock } from "lucide-react";
-import { computeAmortization, computeRachatCredit } from "./amortization.js";
+import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line, BarChart, Bar } from "recharts";
+import { Info, Download, RotateCcw, Search, ChevronDown, ChevronRight, Printer, Pencil, Check, RefreshCw, Plus, X, Copy, SplitSquareHorizontal, Lock, Unlock, TrendingUp } from "lucide-react";
+import { computeAmortization, computeRachatCredit, findPointBascule } from "./amortization.js";
 
-const INK = "#16233D";
-const PAPER = "#F7F4EE";
-const PAPER_ALT = "#EFEAE0";
-const GOLD = "#9C7A3C";
-const GOLD_LIGHT = "#C9A063";
-const GREEN = "#4B7A5B";
-const ROSE = "#93463D";
-const LINE = "#DDD6C5";
+const INK = "#1A2E35";
+const PAPER = "#F5F7F5";
+const PAPER_ALT = "#E9EEEC";
+const GOLD = "#B45309";
+const GOLD_LIGHT = "#E3A76F";
+const GREEN = "#059669";
+const ROSE = "#DC2626";
+const LINE = "#DBE1DE";
 
 const DEFAULT_BAREMES = [
   { id: "b1", label: "25-35 ans", delegationMin: 0.08, delegationMax: 0.15, groupeMin: 0.25, groupeMax: 0.4, ageMax: 35 },
@@ -220,6 +220,7 @@ export default function App() {
   const [rembEcheance, setRembEcheance] = useState(60);
   const [rembMode, setRembMode] = useState("duree");
   const [showRachat, setShowRachat] = useState(false);
+  const [showPatrimoine, setShowPatrimoine] = useState(false);
   const [rachatEcheance, setRachatEcheance] = useState(60);
   const [rachatNouveauTaux, setRachatNouveauTaux] = useState(3);
   const [rachatNouvelleDureeAnnees, setRachatNouvelleDureeAnnees] = useState(20);
@@ -352,6 +353,7 @@ export default function App() {
     setRembEcheance(60);
     setRembMode("duree");
     setShowRachat(false);
+    setShowPatrimoine(false);
     setRachatEcheance(60);
     setRachatNouveauTaux(3);
     setRachatNouvelleDureeAnnees(20);
@@ -443,6 +445,18 @@ export default function App() {
     rachatIraManuelleActif,
     rachatIraManuelle,
   ]);
+
+  // Vision patrimoine : affichage indépendant, purement dérivé du tableau d'amortissement
+  // principal déjà calculé (schedule/years) — ne recalcule et ne modifie rien.
+  const patrimoineChartData = useMemo(() => {
+    return years.map((y) => ({
+      annee: y.annee,
+      capitalRembourse: y.totalCapital,
+      coutBanque: y.totalInterets + y.totalAssurance,
+    }));
+  }, [years]);
+
+  const pointBascule = useMemo(() => findPointBascule(schedule), [schedule]);
 
   const mensualiteTotale = schedule.length ? schedule[0].mensualiteTotale : 0;
   const assuranceMensuelle = schedule.length ? schedule[0].assurance : 0;
@@ -559,6 +573,13 @@ export default function App() {
           <CentimesToggle checked={afficherCentimes} onChange={setAfficherCentimes} />
           <div className="ml-auto flex items-center gap-2">
             <button
+              onClick={() => setShowPatrimoine((v) => !v)}
+              className="flex items-center gap-1.5 text-[12px] font-medium rounded-md px-3 py-1.5 border transition-colors hover:opacity-80"
+              style={{ borderColor: "rgba(247,244,238,0.3)", color: PAPER }}
+            >
+              <TrendingUp size={13} /> {showPatrimoine ? "Fermer vision patrimoine" : "Vision patrimoine"}
+            </button>
+            <button
               onClick={() => setShowRachat((v) => !v)}
               className="flex items-center gap-1.5 text-[12px] font-medium rounded-md px-3 py-1.5 border transition-colors hover:opacity-80"
               style={{ borderColor: "rgba(247,244,238,0.3)", color: PAPER }}
@@ -574,6 +595,43 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {showPatrimoine && (
+          <div className="rounded-xl border p-4 mb-5" style={{ borderColor: LINE, background: "#fff" }}>
+            <h2 className="text-[15px] font-semibold mb-1" style={{ color: INK, fontFamily: "Georgia, serif" }}>
+              Vision patrimoine
+            </h2>
+            <p className="text-[11.5px] mb-3" style={{ color: "#8A8371" }}>
+              Affichage indépendant : ne modifie ni le tableau d'amortissement ni les autres graphiques.
+            </p>
+
+            {pointBascule ? (
+              <div className="rounded-md px-3 py-2 mb-3 text-[12.5px] leading-snug" style={{ background: PAPER_ALT, color: INK }}>
+                <strong>Point de bascule</strong> — à partir de l'échéance n°{pointBascule.n} ({formatDate(pointBascule.date)}), le capital que tu
+                rembourses chaque mois ({euros(pointBascule.capitalAmorti, decimals)}) dépasse pour la première fois ce qui part définitivement à la
+                banque ({euros(pointBascule.interets + pointBascule.assurance, decimals)}).
+              </div>
+            ) : (
+              <div className="rounded-md px-3 py-2 mb-3 text-[12.5px]" style={{ background: PAPER_ALT, color: "#8A8371" }}>
+                Sur ce prêt, le capital remboursé chaque mois ne dépasse jamais les intérêts + assurance du même mois.
+              </div>
+            )}
+
+            <div style={{ height: 320 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={patrimoineChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={LINE} strokeDasharray="2 4" vertical={false} />
+                  <XAxis dataKey="annee" tick={{ fontSize: 10, fill: "#8A8371" }} axisLine={{ stroke: LINE }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "#8A8371" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                  <Tooltip formatter={(v) => euros(v, decimals)} contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: LINE }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="capitalRembourse" stackId="patrimoine" name="Capital remboursé (à toi)" fill={GREEN} />
+                  <Bar dataKey="coutBanque" stackId="patrimoine" name="Intérêts + assurance (à la banque)" fill={ROSE} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {showRachat && (
           <div className="rounded-xl border p-4 mb-5" style={{ borderColor: LINE, background: "#fff" }}>

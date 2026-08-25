@@ -276,3 +276,21 @@ export function computeRachatCredit(p) {
     avantageux: gainNet > 0,
   };
 }
+
+/**
+ * Point de bascule "vision patrimoine" : première échéance du tableau d'amortissement
+ * où le capital amorti du mois dépasse les intérêts + assurance du même mois — c'est-à-dire
+ * le moment où, chaque mois, ce qui revient à l'emprunteur (capital) dépasse ce qui part
+ * définitivement à la banque (intérêts + assurance). Pour un prêt à mensualité constante,
+ * les intérêts diminuent et le capital amorti augmente au fil du temps (le total étant
+ * quasi constant), donc ce point existe forcément avant la fin du prêt, sauf cas
+ * dégénérés (ex. mensualité d'assurance très supérieure au capital amorti jusqu'au bout).
+ * Ne recalcule rien : lit simplement le tableau d'amortissement déjà produit par
+ * computeAmortization, sans le modifier.
+ */
+export function findPointBascule(schedule) {
+  for (const r of schedule) {
+    if (r.capitalAmorti > r.interets + r.assurance) return r;
+  }
+  return null;
+}
