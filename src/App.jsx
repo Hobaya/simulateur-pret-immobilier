@@ -8,7 +8,7 @@ const PAPER = "#F5F7F5";
 const PAPER_ALT = "#E9EEEC";
 const GOLD = "#B45309";
 const GOLD_LIGHT = "#E3A76F";
-const GREEN = "#059669";
+const GREEN = "#047857";
 const ROSE = "#DC2626";
 const LINE = "#DBE1DE";
 
@@ -789,7 +789,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="rounded-lg p-3" style={{ background: rachatResultat.avantageux ? "rgba(75,122,91,0.12)" : "rgba(147,70,61,0.10)" }}>
+                    <div className="rounded-lg p-3" style={{ background: rachatResultat.avantageux ? "rgba(4,120,87,0.12)" : "rgba(220,38,38,0.10)" }}>
                       <div className="text-[11px] uppercase tracking-wide mb-1" style={{ color: "#6B6455" }}>
                         Gain net du rachat
                       </div>
@@ -1390,7 +1390,7 @@ export default function App() {
                                   key={r.n}
                                   className="relative hover:brightness-95"
                                   style={{
-                                    background: isRemboursement ? "rgba(75,122,91,0.14)" : isCurrent ? "#FBF2DE" : idx % 2 === 0 ? "#fff" : "#FCFBF8",
+                                    background: isRemboursement ? "rgba(4,120,87,0.14)" : isCurrent ? "#FBF2DE" : idx % 2 === 0 ? "#fff" : "#FCFBF8",
                                   }}
                                 >
                                   <td className="px-3 py-1.5" style={{ color: "#8A8371" }}>{r.n}</td>
