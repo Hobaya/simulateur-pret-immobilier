@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
 import { Info, Download, RotateCcw, Search, ChevronDown, ChevronRight, Printer, Pencil, Check, RefreshCw, Plus, X, Copy, SplitSquareHorizontal, Lock, Unlock } from "lucide-react";
-import { computeAmortization } from "./amortization.js";
+import { computeAmortization, computeRachatCredit } from "./amortization.js";
 
 const INK = "#16233D";
 const PAPER = "#F7F4EE";
@@ -219,6 +219,13 @@ export default function App() {
   const [rembMontant, setRembMontant] = useState(10000);
   const [rembEcheance, setRembEcheance] = useState(60);
   const [rembMode, setRembMode] = useState("duree");
+  const [showRachat, setShowRachat] = useState(false);
+  const [rachatEcheance, setRachatEcheance] = useState(60);
+  const [rachatNouveauTaux, setRachatNouveauTaux] = useState(3);
+  const [rachatNouvelleDureeAnnees, setRachatNouvelleDureeAnnees] = useState(20);
+  const [rachatFrais, setRachatFrais] = useState(2000);
+  const [rachatIraManuelleActif, setRachatIraManuelleActif] = useState(false);
+  const [rachatIraManuelle, setRachatIraManuelle] = useState(0);
   const [age, setAge] = useState(38);
   const [baremes, setBaremes] = useState(DEFAULT_BAREMES);
   const [baremeSource, setBaremeSource] = useState(DEFAULT_SOURCE);
@@ -344,6 +351,13 @@ export default function App() {
     setRembMontant(10000);
     setRembEcheance(60);
     setRembMode("duree");
+    setShowRachat(false);
+    setRachatEcheance(60);
+    setRachatNouveauTaux(3);
+    setRachatNouvelleDureeAnnees(20);
+    setRachatFrais(2000);
+    setRachatIraManuelleActif(false);
+    setRachatIraManuelle(0);
     setSearch("");
     setCollapsedYears(new Set());
   };
@@ -387,6 +401,48 @@ export default function App() {
       dureeReelleMois: schedule.length,
     };
   }, [remboursementAnticipeParam, sansRemboursement, remboursementAnticipeInfo, totalInterets, schedule.length, coutTotal]);
+
+  // Simulation de rachat de crédit : outil d'analyse indépendant, ne touche ni au
+  // tableau d'amortissement principal (schedule/years) ni au graphique — computeRachatCredit
+  // recalcule son propre scénario "si maintien" via computeAmortization, sans le modifier.
+  const rachatResultat = useMemo(() => {
+    if (!showRachat) return null;
+    return computeRachatCredit({
+      capital,
+      taux,
+      dureeAnnees,
+      tauxAssurance,
+      modeAssurance,
+      assuranceSaisie,
+      assuranceMontantFixe,
+      assuranceMontantTotal,
+      fraisDossier,
+      dateDebut,
+      echeanceRachat: Math.round(rachatEcheance),
+      nouveauTaux: rachatNouveauTaux,
+      nouvelleDureeAnnees: rachatNouvelleDureeAnnees,
+      fraisNouveauPret: rachatFrais,
+      iraManuelle: rachatIraManuelleActif ? rachatIraManuelle : null,
+    });
+  }, [
+    showRachat,
+    capital,
+    taux,
+    dureeAnnees,
+    tauxAssurance,
+    modeAssurance,
+    assuranceSaisie,
+    assuranceMontantFixe,
+    assuranceMontantTotal,
+    fraisDossier,
+    dateDebut,
+    rachatEcheance,
+    rachatNouveauTaux,
+    rachatNouvelleDureeAnnees,
+    rachatFrais,
+    rachatIraManuelleActif,
+    rachatIraManuelle,
+  ]);
 
   const mensualiteTotale = schedule.length ? schedule[0].mensualiteTotale : 0;
   const assuranceMensuelle = schedule.length ? schedule[0].assurance : 0;
@@ -501,14 +557,156 @@ export default function App() {
           <Stat label="TAEG indicatif" value={`${taeg.toFixed(3)} %`} sub="non normé" />
           <div className="h-9 w-px opacity-20" style={{ background: PAPER }} />
           <CentimesToggle checked={afficherCentimes} onChange={setAfficherCentimes} />
-          <button
-            onClick={() => (showComparateur ? setShowComparateur(false) : openComparateur())}
-            className="ml-auto flex items-center gap-1.5 text-[12px] font-medium rounded-md px-3 py-1.5 border transition-colors hover:opacity-80"
-            style={{ borderColor: "rgba(247,244,238,0.3)", color: PAPER }}
-          >
-            <SplitSquareHorizontal size={13} /> {showComparateur ? "Fermer le comparateur" : "Comparer des scénarios"}
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setShowRachat((v) => !v)}
+              className="flex items-center gap-1.5 text-[12px] font-medium rounded-md px-3 py-1.5 border transition-colors hover:opacity-80"
+              style={{ borderColor: "rgba(247,244,238,0.3)", color: PAPER }}
+            >
+              <RefreshCw size={13} /> {showRachat ? "Fermer le rachat" : "Simuler un rachat de crédit"}
+            </button>
+            <button
+              onClick={() => (showComparateur ? setShowComparateur(false) : openComparateur())}
+              className="flex items-center gap-1.5 text-[12px] font-medium rounded-md px-3 py-1.5 border transition-colors hover:opacity-80"
+              style={{ borderColor: "rgba(247,244,238,0.3)", color: PAPER }}
+            >
+              <SplitSquareHorizontal size={13} /> {showComparateur ? "Fermer le comparateur" : "Comparer des scénarios"}
+            </button>
+          </div>
         </div>
+
+        {showRachat && (
+          <div className="rounded-xl border p-4 mb-5" style={{ borderColor: LINE, background: "#fff" }}>
+            <h2 className="text-[15px] font-semibold mb-1" style={{ color: INK, fontFamily: "Georgia, serif" }}>
+              Simulation de rachat de crédit
+            </h2>
+            <p className="text-[11.5px] mb-3" style={{ color: "#8A8371" }}>
+              Outil d'analyse indépendant : ne modifie ni le tableau d'amortissement ni le graphique ci-dessous.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-3">
+                <NumberField
+                  label="Échéance du rachat"
+                  value={rachatEcheance}
+                  onChange={setRachatEcheance}
+                  step={1}
+                  min={1}
+                  suffix="mois"
+                  tooltip="Numéro du mois auquel le prêt actuel est intégralement remboursé par le nouveau prêt."
+                />
+                <NumberField label="Nouveau taux d'intérêt" value={rachatNouveauTaux} onChange={setRachatNouveauTaux} step={0.05} suffix="%" />
+                <NumberField label="Nouvelle durée" value={rachatNouvelleDureeAnnees} onChange={setRachatNouvelleDureeAnnees} step={1} min={1} suffix="ans" />
+                <NumberField
+                  label="Frais du nouveau prêt"
+                  value={rachatFrais}
+                  onChange={setRachatFrais}
+                  step={100}
+                  suffix="€"
+                  tooltip="Dossier, garantie, courtage... financés dans le nouveau capital emprunté."
+                />
+
+                <div className="rounded-md border p-2.5" style={{ borderColor: LINE, background: PAPER_ALT }}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-medium uppercase tracking-wide" style={{ color: "#6B6455" }}>
+                      IRA (indemnité de remboursement anticipé)
+                    </span>
+                    <button
+                      onClick={() => setRachatIraManuelleActif((v) => !v)}
+                      className="flex items-center gap-1 text-[11px] hover:opacity-70"
+                      style={{ color: INK }}
+                    >
+                      {rachatIraManuelleActif ? <Check size={12} /> : <Pencil size={12} />}
+                      {rachatIraManuelleActif ? "Auto" : "Saisir manuellement"}
+                    </button>
+                  </div>
+                  {rachatResultat && (
+                    <div className="text-[11px] mb-1.5" style={{ color: "#6B6455" }}>
+                      Plafond légal (art. R313-25) : <strong style={{ color: INK }}>{euros(rachatResultat.iraLegale, decimals)}</strong> — le plus
+                      petit entre 6 mois d'intérêts et 3 % du capital restant dû.
+                    </div>
+                  )}
+                  {rachatIraManuelleActif && (
+                    <NumberField
+                      label="Montant de l'IRA"
+                      value={rachatIraManuelle}
+                      onChange={setRachatIraManuelle}
+                      step={100}
+                      suffix="€"
+                      tooltip="Cas d'exonération légale (mobilité, décès, revente liée...) ou montant négocié avec la banque."
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div>
+                {!rachatResultat ? (
+                  <div className="text-[12px]" style={{ color: "#8A8371" }}>
+                    Échéance de rachat au-delà de la durée du prêt actuel ({schedule.length} mois) : aucun résultat.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                          CRD au rachat
+                        </div>
+                        <div className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
+                          {euros(rachatResultat.crdRachat, decimals)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                          Nouveau capital emprunté
+                        </div>
+                        <div className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
+                          {euros(rachatResultat.nouveauCapital, decimals)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                          Nouvelle mensualité
+                        </div>
+                        <div className="text-[14px] font-semibold tabular-nums" style={{ color: INK }}>
+                          {euros(rachatResultat.nouvelleMensualite, decimals)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide" style={{ color: "#8A8371" }}>
+                          Durée totale (rachat inclus)
+                        </div>
+                        <div className="text-[14px] font-semibold" style={{ color: INK }}>
+                          {formatDureeMois(rachatResultat.dureeTotaleMois)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg p-3" style={{ background: rachatResultat.avantageux ? "rgba(75,122,91,0.12)" : "rgba(147,70,61,0.10)" }}>
+                      <div className="text-[11px] uppercase tracking-wide mb-1" style={{ color: "#6B6455" }}>
+                        Gain net du rachat
+                      </div>
+                      <div
+                        className="text-[22px] font-semibold tabular-nums"
+                        style={{ color: rachatResultat.avantageux ? GREEN : ROSE, fontFamily: "Georgia, serif" }}
+                      >
+                        {rachatResultat.gainNet >= 0 ? "+" : ""}
+                        {euros(rachatResultat.gainNet, decimals)}
+                      </div>
+                      <div className="text-[12px] font-medium mt-0.5" style={{ color: rachatResultat.avantageux ? GREEN : ROSE }}>
+                        {rachatResultat.avantageux ? "Rachat avantageux" : "Rachat non avantageux"}
+                      </div>
+                      <div className="text-[10.5px] mt-1.5 leading-snug" style={{ color: "#8A8371" }}>
+                        Coût restant si maintien {euros(rachatResultat.coutRestantSiMaintien, decimals)} − coût du nouveau prêt{" "}
+                        {euros(rachatResultat.coutNouveauPret, decimals)} − IRA {euros(rachatResultat.iraAppliquee, decimals)} − frais{" "}
+                        {euros(rachatFrais, decimals)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {showComparateur && (
           <div className="rounded-xl border p-4 mb-5" style={{ borderColor: LINE, background: "#fff" }}>

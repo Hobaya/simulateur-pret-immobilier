@@ -195,3 +195,79 @@ export function computeAmortization(p) {
     remboursementAnticipeInfo,
   };
 }
+
+/**
+ * Simulation de rachat de crédit : remboursement intégral du prêt actuel à une échéance
+ * donnée, financé par un nouveau prêt à un taux (et éventuellement une durée) différents.
+ *
+ * IRA (indemnité de remboursement anticipé) calculée au plafond légal français
+ * (art. R313-25 du Code de la consommation) : le plus petit montant entre 6 mois
+ * d'intérêts au taux du prêt actuel et 3% du capital restant dû à l'échéance du rachat.
+ * `p.iraManuelle` permet de saisir un montant différent (exonération légale ou négociation).
+ *
+ * Outil d'analyse indépendant : ne modifie ni ne réutilise le tableau d'amortissement
+ * principal — il recalcule son propre scénario "si maintien" via computeAmortization,
+ * sans toucher à la fonction elle-même.
+ */
+export function computeRachatCredit(p) {
+  const baseline = computeAmortization({
+    capital: p.capital,
+    taux: p.taux,
+    dureeAnnees: p.dureeAnnees,
+    tauxAssurance: p.tauxAssurance,
+    modeAssurance: p.modeAssurance,
+    assuranceSaisie: p.assuranceSaisie,
+    assuranceMontantFixe: p.assuranceMontantFixe,
+    assuranceMontantTotal: p.assuranceMontantTotal,
+    fraisDossier: p.fraisDossier,
+    dateDebut: p.dateDebut,
+  });
+
+  const n = baseline.schedule.length;
+  const echeance = Math.round(p.echeanceRachat);
+  if (!(echeance >= 1) || echeance > n) return null;
+
+  const ligneRachat = baseline.schedule[echeance - 1];
+  const crdRachat = ligneRachat.crdFin;
+
+  const plafondSixMoisInterets = 6 * crdRachat * (p.taux / 100 / 12);
+  const plafondTroisPourcentCapital = crdRachat * 0.03;
+  const iraLegale = Math.min(plafondSixMoisInterets, plafondTroisPourcentCapital);
+  const iraAppliquee = p.iraManuelle != null && p.iraManuelle >= 0 ? p.iraManuelle : iraLegale;
+
+  const fraisNouveauPret = p.fraisNouveauPret || 0;
+  const nouveauCapital = crdRachat + iraAppliquee + fraisNouveauPret;
+
+  const nouveauPret = computeAmortization({
+    capital: nouveauCapital,
+    taux: p.nouveauTaux,
+    dureeAnnees: p.nouvelleDureeAnnees,
+    tauxAssurance: p.tauxAssurance,
+    modeAssurance: p.modeAssurance,
+    assuranceSaisie: p.assuranceSaisie,
+    assuranceMontantFixe: p.assuranceMontantFixe,
+    assuranceMontantTotal: p.assuranceMontantTotal,
+    fraisDossier: fraisNouveauPret,
+    dateDebut: ligneRachat.date.toISOString().slice(0, 10),
+  });
+
+  const coutRestantSiMaintien = baseline.schedule
+    .slice(echeance)
+    .reduce((sum, r) => sum + r.interets + r.assurance, 0);
+  const coutNouveauPret = nouveauPret.totalInterets + nouveauPret.totalAssurance;
+  const gainNet = coutRestantSiMaintien - coutNouveauPret - iraAppliquee - fraisNouveauPret;
+
+  return {
+    echeanceRachat: echeance,
+    crdRachat,
+    iraLegale,
+    iraAppliquee,
+    nouveauCapital,
+    nouvelleMensualite: nouveauPret.mensualiteTotale,
+    dureeTotaleMois: echeance + nouveauPret.schedule.length,
+    coutRestantSiMaintien,
+    coutNouveauPret,
+    gainNet,
+    avantageux: gainNet > 0,
+  };
+}

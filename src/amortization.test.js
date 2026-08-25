@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeAmortization } from "./amortization.js";
+import { computeAmortization, computeRachatCredit } from "./amortization.js";
 
 const baseParams = {
   capital: 100000,
@@ -251,5 +251,100 @@ describe("computeAmortization — remboursement anticipé", () => {
     expect(b.totalInterets).toBeCloseTo(a.totalInterets, 9);
     expect(b.taeg).toBeCloseTo(a.taeg, 9);
     expect(b.remboursementAnticipeInfo).toBeNull();
+  });
+});
+
+describe("computeRachatCredit", () => {
+  // Cas de référence : 250 000 € à 4 % sur 25 ans, rachat au mois 60 vers 3 % sur 20 ans.
+  const pretActuel = {
+    capital: 250000,
+    taux: 4,
+    dureeAnnees: 25,
+    tauxAssurance: 0,
+    modeAssurance: "initial",
+    assuranceSaisie: "taux",
+    assuranceMontantFixe: 0,
+    assuranceMontantTotal: 0,
+    fraisDossier: 0,
+    dateDebut: "2024-01-01",
+  };
+  const rachatRef = {
+    ...pretActuel,
+    echeanceRachat: 60,
+    nouveauTaux: 3,
+    nouvelleDureeAnnees: 20,
+    fraisNouveauPret: 2000,
+    iraManuelle: null,
+  };
+
+  it("le nouveau capital emprunté est exactement égal à CRD + IRA + frais du nouveau prêt", () => {
+    const r = computeRachatCredit(rachatRef);
+    expect(r.nouveauCapital).toBeCloseTo(r.crdRachat + r.iraAppliquee + 2000, 6);
+  });
+
+  it("l'IRA calculée automatiquement ne dépasse jamais le plus petit des deux plafonds légaux (6 mois d'intérêts, 3 % du CRD)", () => {
+    const r = computeRachatCredit(rachatRef);
+    const plafondSixMois = 6 * r.crdRachat * (pretActuel.taux / 100 / 12);
+    const plafondTroisPourcent = r.crdRachat * 0.03;
+    expect(r.iraLegale).toBeLessThanOrEqual(plafondSixMois + 1e-9);
+    expect(r.iraLegale).toBeLessThanOrEqual(plafondTroisPourcent + 1e-9);
+    expect(r.iraLegale).toBeCloseTo(Math.min(plafondSixMois, plafondTroisPourcent), 6);
+    // Sans montant manuel, l'IRA appliquée est bien l'IRA légale
+    expect(r.iraAppliquee).toBeCloseTo(r.iraLegale, 6);
+  });
+
+  it("cohérence sur le cas de référence (250 000 €/4 %/25 ans, rachat mois 60 vers 3 %/20 ans)", () => {
+    const r = computeRachatCredit(rachatRef);
+    // Valeurs de référence calculées indépendamment (formule d'annuité standard)
+    expect(r.crdRachat).toBeCloseTo(217761.54, 1);
+    expect(r.iraAppliquee).toBeCloseTo(4355.23, 1); // plafond 6 mois d'intérêts, plus petit que 3 % du CRD
+    expect(r.nouveauCapital).toBeCloseTo(224116.77, 1);
+    expect(r.nouvelleMensualite).toBeCloseTo(1242.95, 1);
+    expect(r.coutRestantSiMaintien).toBeCloseTo(98940.56, 1);
+    expect(r.coutNouveauPret).toBeCloseTo(74190.32, 1);
+    expect(r.gainNet).toBeCloseTo(18395.01, 1);
+    expect(r.avantageux).toBe(true);
+    expect(r.dureeTotaleMois).toBe(60 + 240);
+  });
+
+  it("un montant d'IRA manuel remplace le plafond légal automatique", () => {
+    const r = computeRachatCredit({ ...rachatRef, iraManuelle: 10000 });
+    expect(r.iraAppliquee).toBe(10000);
+    expect(r.iraLegale).toBeCloseTo(4355.23, 1); // le plafond légal reste calculé/exposé pour référence
+    expect(r.nouveauCapital).toBeCloseTo(r.crdRachat + 10000 + 2000, 6);
+  });
+
+  it("une échéance de rachat hors plage (au-delà de la durée du prêt actuel) renvoie null", () => {
+    expect(computeRachatCredit({ ...rachatRef, echeanceRachat: 9999 })).toBeNull();
+    expect(computeRachatCredit({ ...rachatRef, echeanceRachat: 0 })).toBeNull();
+  });
+
+  it("un rachat désavantageux (taux plus élevé, frais lourds en fin de prêt) donne un gain net négatif", () => {
+    const r = computeRachatCredit({
+      ...pretActuel,
+      echeanceRachat: 290,
+      nouveauTaux: 5,
+      nouvelleDureeAnnees: 1,
+      fraisNouveauPret: 5000,
+      iraManuelle: null,
+    });
+    expect(r.gainNet).toBeLessThan(0);
+    expect(r.avantageux).toBe(false);
+  });
+
+  it("le drapeau avantageux correspond toujours au signe du gain net", () => {
+    const avantageux = computeRachatCredit(rachatRef);
+    const desavantageux = computeRachatCredit({ ...rachatRef, nouveauTaux: 4.5, fraisNouveauPret: 15000, iraManuelle: 6000 });
+    expect(avantageux.avantageux).toBe(avantageux.gainNet > 0);
+    expect(desavantageux.avantageux).toBe(desavantageux.gainNet > 0);
+    expect(desavantageux.gainNet).toBeLessThan(0);
+  });
+
+  it("ne modifie pas le tableau d'amortissement du prêt actuel (outil d'analyse indépendant)", () => {
+    const avant = computeAmortization(pretActuel);
+    computeRachatCredit(rachatRef);
+    const apres = computeAmortization(pretActuel);
+    expect(apres.schedule.length).toBe(avant.schedule.length);
+    expect(apres.totalInterets).toBeCloseTo(avant.totalInterets, 9);
   });
 });
